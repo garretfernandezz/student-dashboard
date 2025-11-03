@@ -1,26 +1,42 @@
+// === FORCE GIT + WINDOWS FIX ===
+def gitCmd = 'C:\\Program Files\\Git\\cmd\\git.exe'
+def git(cmd) {
+    bat "${gitCmd} ${cmd}"
+}
+
 pipeline {
     agent any
 
     environment {
         DOCKERHUB_CRED = credentials('dockerhub-creds')
-        IMAGE_NAME = "yourusername/student-dashboard"
+        IMAGE_NAME = "garretfernandezz/student-dashboard"
         NAMESPACE = "${env.BRANCH_NAME == 'main' ? 'production' : 'test'}"
         TAG = "${env.BRANCH_NAME}-${env.BUILD_NUMBER}"
     }
 
     stages {
-        stage('Checkout') {
+        stage('Manual Checkout') {
             steps {
-                checkout scm
+                script {
+                    checkout([
+                        $class: 'GitSCM',
+                        branches: [[name: env.BRANCH_NAME]],
+                        userRemoteConfigs: [[
+                            url: 'https://github.com/garretfernandezz/student-dashboard.git',
+                            credentialsId: 'github-creds'
+                        ]],
+                        extensions: [[$class: 'CleanBeforeCheckout']]
+                    ])
+                }
             }
         }
 
         stage('Build Docker Image') {
             steps {
                 script {
-                    // Replace placeholder in HTML
-                    sh "sed -i 's/{{BUILD_NUMBER}}/${BUILD_NUMBER}/g' app/index.html"
-
+                    powershell """
+                    (Get-Content app\\index.html) -replace '\\{\\{BUILD_NUMBER\\}\\}', '${BUILD_NUMBER}' | Set-Content app\\index.html
+                    """
                     dockerImage = docker.build("${IMAGE_NAME}:${TAG}")
                 }
             }
@@ -40,13 +56,10 @@ pipeline {
         stage('Deploy to Kubernetes') {
             steps {
                 script {
-                    // Replace placeholders in YAML
-                    sh """
-                    sed "s|NAMESPACE|${NAMESPACE}|g; s|TAG|${TAG}|g" deployment.yaml > deployment-rendered.yaml
+                    powershell """
+                    ((Get-Content deployment.yaml) -replace 'NAMESPACE', '${NAMESPACE}') -replace 'TAG', '${TAG}' | Set-Content deployment-rendered.yaml
+                    kubectl apply -f deployment-rendered.yaml
                     """
-
-                    // Apply using kubectl
-                    sh "kubectl apply -f deployment-rendered.yaml"
                 }
             }
         }
@@ -55,9 +68,6 @@ pipeline {
     post {
         success {
             echo "Deployed to ${NAMESPACE} with tag ${TAG}"
-        }
-        cleanup {
-            sh "docker rmi ${IMAGE_NAME}:${TAG} || true"
         }
     }
 }
