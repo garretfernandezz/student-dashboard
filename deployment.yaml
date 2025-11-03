@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: student-dashboard
+  namespace: NAMESPACE # Placeholder: Replaced by Jenkins
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: student-dashboard
+  template:
+    metadata:
+      labels:
+        app: student-dashboard
+    spec:
+      containers:
+        - name: dashboard
+          image: yourusername/student-dashboard:TAG # Placeholder: Replaced
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: student-dashboard
+  namespace: NAMESPACE
+spec:
+  selector:
+    app: student-dashboard
+  ports:
+    - port: 80
+      targetPort: 80
+  type: LoadBalancer
